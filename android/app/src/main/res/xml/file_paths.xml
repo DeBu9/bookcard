@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider 授权路径：只开放 cache/images/ 供分享给其他应用读取。
+     分享卡片图时先把 PNG 写到这里，再以 content:// 形式交给系统分享面板。
+     只开放这一个子目录，不含 files/ 与整个 cache/，避免过度暴露私有文件。 -->
+<paths>
+    <cache-path name="shared_images" path="images/" />
+</paths>

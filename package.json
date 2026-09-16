@@ -1,0 +1,29 @@
+{
+  "name": "book-card",
+  "version": "1.0.1",
+  "private": true,
+  "description": "读书卡 —— 把读过的话，留成卡片。纯静态网页 + Android WebView 外壳",
+  "keywords": [
+    "读书",
+    "摘录",
+    "读书笔记",
+    "卡片",
+    "android",
+    "webview"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "test": "node smoke-test.js && node smoke-test.js --no-bridge",
+    "test:bridge": "node smoke-test.js",
+    "test:browser": "node smoke-test.js --no-bridge",
+    "serve": "node tools/serve.js",
+    "build": "bash build-apk.sh",
+    "build:debug": "bash build-apk.sh debug"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1"
+  },
+  "engines": {
+    "node": ">=22.22.2"
+  }
+}

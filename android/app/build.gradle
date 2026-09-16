@@ -1,0 +1,66 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+// 签名信息从 android/keystore.properties 读取，该文件在 .gitignore 中，不进仓库。
+// 文件缺失时不配置 release 签名 —— 别人 clone 下来没有你的 keystore，这是预期行为：
+// 此时用 `bash build-apk.sh debug` 出调试包，或参照 keystore.properties.example 配自己的签名。
+def keystorePropsFile = rootProject.file('keystore.properties')
+def hasSigningConfig = keystorePropsFile.exists()
+def keystoreProps = new Properties()
+if (hasSigningConfig) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
+android {
+    namespace 'com.debugmh.bookcard'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.debugmh.bookcard"
+        minSdk 26
+        targetSdk 34
+        versionCode 2
+        versionName "1.0.1"
+    }
+
+    // 正式签名（用于产出可分发的 release 包），凭据来自 android/keystore.properties。
+    // ⚠️ keystore 与密码必须长期保存：同一个包名的后续更新只能用它签名，
+    //    换签名 = 装不上，用户必须先卸载、数据清空。
+    signingConfigs {
+        release {
+            if (hasSigningConfig) {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (hasSigningConfig) {
+                signingConfig signingConfigs.release
+            }
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions { jvmTarget = '17' }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.activity:activity-ktx:1.8.2'
+    // WebViewAssetLoader：把本地页面挂到 https://appassets.androidplatform.net/ 下，拿到正常 HTTPS 源。
+    // 这是 OCR 能联网的关键：file:// 页面发起的跨域 fetch 会被 Chromium 拦截（源为 null），
+    // Tesseract 加载 worker / wasm / 语言包必然失败，用户侧只看到"识别失败"。
+    implementation 'androidx.webkit:webkit:1.8.0'
+}

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 用 Light 而非 DayNight：跟着系统深色走会把导航栏刷成反色，与网页自有的纸白/夜读冲突 -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">
+        <!-- 背景色与网页纸白一致，避免冷启动瞬间闪白 -->
+        <item name="android:windowBackground">@color/paper_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <!-- Android 10+ 对透明栏的强制对比度，会在上下边缘浮出半透明灰白 -->
+        <item name="android:enforceStatusBarContrast">false</item>
+        <item name="android:enforceNavigationBarContrast">false</item>
+    </style>
+</resources>

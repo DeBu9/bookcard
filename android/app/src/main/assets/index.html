@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#F4EFE6">
+<title>读书卡</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+:root{
+--bg:#F4EFE6;--paper:#FFFDF9;--ink:#26231E;--ink2:#564E44;--muted:#948B7D;
+--line:#E7DFD0;--soft:#F1EAE0;--accent:#A8613C;--accent2:#C79A6B;--accent-soft:#EFE0D3;
+--serif:Georgia,"Songti SC","Noto Serif CJK SC","Source Han Serif SC",serif;
+--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.app{max-width:760px;margin:0 auto;padding:0 20px calc(104px + var(--sab))}
+
+/* 顶部 */
+.topbar{position:sticky;top:0;z-index:3;background:var(--bg);padding:calc(18px + var(--sat)) 0 12px}
+.topbar::after{content:"";position:absolute;left:0;right:0;bottom:-16px;height:16px;background:linear-gradient(rgba(244,239,230,.95),rgba(244,239,230,0));pointer-events:none}
+.tb-row{display:flex;align-items:center;gap:12px}
+.brand{font:600 25px/1.25 var(--serif);margin:0;letter-spacing:.4px;white-space:nowrap}
+.brand span{color:var(--accent)}
+.sub{font-size:12px;color:var(--muted);margin:4px 0 0;letter-spacing:.2px}
+
+/* 视图 */
+.view{display:none;padding-top:18px}
+.view.active{display:block;animation:fade .22s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.section-head{display:flex;justify-content:space-between;align-items:baseline;margin:6px 0 14px}
+.section-head h2{font:600 21px/1.3 var(--serif);margin:0;letter-spacing:.3px}
+.count,.small{font-size:12px;color:var(--muted);line-height:1.75}
+
+/* 搜索 */
+.searchwrap{position:relative;margin-bottom:18px}
+.searchwrap .sic{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:17px;height:17px;color:var(--muted);pointer-events:none}
+.search,.input,.textarea{width:100%;border:1px solid var(--line);background:var(--paper);border-radius:14px;padding:13px 15px;outline:none;font-size:15px;font-family:inherit;color:var(--ink);transition:border-color .16s,box-shadow .16s}
+.search{padding-left:42px}
+.input:focus,.textarea:focus,.search:focus{border-color:var(--accent2,#C79A6B);box-shadow:0 0 0 3px rgba(168,97,60,.08)}
+.input::placeholder,.textarea::placeholder,.search::placeholder{color:#B4AB9C}
+.textarea{min-height:150px;resize:vertical;line-height:1.8}
+
+/* 卡片 */
+.grid{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:760px){.grid{grid-template-columns:1fr 1fr}.app{padding:0 24px calc(104px + var(--sab))}}
+.card{position:relative;background:var(--paper);border:1px solid var(--line);border-radius:20px;padding:20px 20px 16px 24px;box-shadow:0 1px 2px rgba(60,48,30,.03),0 10px 26px -16px rgba(60,48,30,.35);transition:transform .18s ease,box-shadow .18s ease}
+.card:active{transform:scale(.988)}
+.card::before{content:"";position:absolute;left:0;top:20px;bottom:20px;width:3px;border-radius:0 3px 3px 0;background:linear-gradient(180deg,var(--accent),var(--accent2,#C79A6B))}
+.bookname{font:600 16px/1.4 var(--serif);padding-right:74px}
+.author{color:var(--muted);font-size:12.5px;margin-top:3px}
+.quote{font:19px/1.8 var(--serif);margin:15px 0 0;color:var(--ink);letter-spacing:.2px;white-space:pre-wrap}
+.chapter{font-size:12px;color:var(--muted);margin-top:10px}
+.thought{border-left:2px solid #DDCBB5;padding-left:12px;color:#6E6659;font-size:13.5px;line-height:1.75;margin:13px 0 0;white-space:pre-wrap}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:13px}
+.tag{background:var(--soft);border-radius:999px;padding:4px 10px;font-size:11px;color:#796E5E}
+.date{font-size:11px;color:#B4AB9C;margin-top:13px;letter-spacing:.3px}
+.cardtools{position:absolute;right:12px;top:13px;display:flex;gap:6px}
+.act-ic{width:32px;height:32px;padding:0;border:0;border-radius:50%;background:var(--soft);color:#8C8271;display:flex;align-items:center;justify-content:center;transition:background .16s,color .16s}
+.act-ic svg{width:16px;height:16px}
+.act-ic:active{background:var(--accent-soft);color:var(--accent)}
+
+/* 空态 */
+.empty{text-align:center;color:var(--muted);padding:56px 20px 48px}
+.empty .mark{font:600 62px/1 var(--serif);color:#DDD3C1;margin-bottom:10px}
+.empty p{margin:0 0 6px;font-size:14px}
+.empty .primary{margin-top:18px}
+
+/* 我的书 */
+.bookgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media(min-width:520px){.bookgrid{grid-template-columns:repeat(4,1fr)}}
+@media(min-width:760px){.bookgrid{grid-template-columns:repeat(5,1fr)}}
+.book{overflow:hidden}
+.cover{position:relative;aspect-ratio:2/3;border-radius:12px;overflow:hidden;background:linear-gradient(150deg,#EBE3D5,#D9CEBA);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 18px -12px rgba(60,48,30,.7),inset 0 0 0 1px rgba(255,255,255,.55)}
+.cover::after{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:linear-gradient(90deg,rgba(80,60,35,.2),rgba(80,60,35,0))}
+.cover img{width:100%;height:100%;object-fit:cover}
+.letter{font:600 30px var(--serif);color:#9C8F79}
+.bookinfo{padding:9px 2px 0}
+.booktitle{font-size:13px;font-weight:600;line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.bookauthor{color:var(--muted);font-size:11.5px;margin-top:2px}
+
+/* 我的 */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:17px 10px;text-align:center;box-shadow:0 8px 20px -18px rgba(60,48,30,.6)}
+button.stat{font-family:inherit;color:inherit;cursor:pointer;-webkit-appearance:none}
+.stat.link .small{color:var(--accent);font-weight:600;letter-spacing:.3px}
+.stat.link{transition:transform .14s,box-shadow .14s,border-color .14s}
+.stat.link:active{transform:scale(.96);border-color:var(--accent2)}
+/* 子页面标题（带返回） */
+.pagehead{display:flex;align-items:center;gap:11px;margin:6px 0 16px}
+.pagehead h2{font:600 21px/1.3 var(--serif);margin:0;letter-spacing:.3px;flex:1}
+.backbtn{width:34px;height:34px;flex:none;padding:0;border:1px solid var(--line);background:var(--paper);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ink2);transition:transform .14s,background .14s}
+.backbtn svg{width:17px;height:17px}
+.backbtn:active{transform:scale(.93);background:var(--soft)}
+.linkbtn{border:0;background:transparent;color:var(--accent);font-size:13px;font-family:inherit;padding:4px 0;letter-spacing:.3px}
+.num{font:600 25px/1.1 var(--serif)}
+.stat .small{margin-top:4px}
+.block-title{font:600 15px var(--serif);margin:26px 0 10px;letter-spacing:.3px}
+.btn-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.primary,.secondary{border-radius:14px;padding:13px 16px;font-size:14px;font-family:inherit;transition:transform .14s,opacity .14s}
+.primary{border:0;background:#2C2924;color:#fff;width:100%}
+.secondary{border:1px solid var(--line);background:var(--paper);color:var(--ink2)}
+.primary:active,.secondary:active{transform:scale(.975)}
+.primary[disabled]{opacity:.5}
+.form{max-width:640px}
+/* 记录页的保存入口：与品牌栏「读书卡」标题同一水平线（平行）并排，
+   随品牌栏一起吸顶——滚动时始终在顶部可见，不必滚到底部才能保存，
+   同时不再像早先那样单独占掉一整行、把标题挤到下一行。
+   只在记录页出现，由 show() 写进 body 的 data-view 控制显隐。 */
+.savebar{display:none;flex:none;align-items:center;gap:8px;margin-left:auto}
+body[data-view="add"] .savebar{display:flex}
+.savebar .primary{width:auto;padding:9px 15px;font-size:13.5px;letter-spacing:.2px;box-shadow:0 8px 16px -12px rgba(44,41,36,.95)}
+.savebar .linkbtn{flex:none;padding:6px 2px;font-size:12.5px;white-space:nowrap}
+@media(max-width:400px){
+.savebar .primary{padding:9px 12px;font-size:13px}
+.savebar .linkbtn{font-size:12px}
+}
+.label{display:block;font-size:12px;color:#7B7263;margin:16px 0 7px;letter-spacing:.3px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:520px){.row{grid-template-columns:1fr}}
+.upload{border:1px dashed #D3C9B8;background:#FBF8F1;border-radius:16px;padding:18px;text-align:center}
+.upload input{display:none}
+.upload label{display:inline-block;padding:10px 16px;border-radius:999px;background:#2C2924;color:#fff;font-size:14px}
+.preview{max-width:100%;max-height:220px;border-radius:12px;margin-top:14px;display:none}
+
+/* 底部导航 */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:4;display:flex;align-items:flex-end;background:rgba(255,253,249,.96);backdrop-filter:blur(14px) saturate(1.3);border-top:1px solid var(--line);padding:8px 6px calc(8px + var(--sab))}
+.tabbar button{flex:1;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;color:#A79E8F;font-size:11px;font-family:inherit;letter-spacing:.4px;transition:color .16s}
+.tabbar button svg{width:22px;height:22px}
+.tabbar button.active{color:var(--accent);font-weight:600}
+.tabbar .tab-add{padding-top:0}
+.tabbar .tab-add i{display:flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;background:#2C2924;color:#fff;box-shadow:0 8px 18px -8px rgba(40,32,20,.75);margin-top:-16px;margin-bottom:1px;transition:transform .16s}
+.tabbar .tab-add:active i{transform:scale(.93)}
+.tabbar .tab-add svg{width:20px;height:20px}
+
+/* 分享弹层 */
+.modal{position:fixed;inset:0;background:rgba(38,35,30,.5);backdrop-filter:blur(3px);display:none;align-items:flex-end;justify-content:center;z-index:9}
+.modal.show{display:flex}
+.sheet{width:100%;max-width:520px;background:var(--paper);border-radius:26px 26px 0 0;padding:14px 20px calc(20px + var(--sab));max-height:93vh;overflow-y:auto;animation:up .26s cubic-bezier(.2,.85,.3,1)}
+@keyframes up{from{transform:translateY(24px);opacity:.4}to{transform:none;opacity:1}}
+@media(min-width:700px){.modal{align-items:center}.sheet{border-radius:26px}}
+.grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 14px}
+.sheet-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.sheet-head h3{font:600 17px var(--serif);margin:0}
+.close{border:0;background:transparent;font-size:24px;line-height:1;color:var(--muted);padding:0 4px}
+.cardwrap{background:#F7F2E9;border:1px solid var(--line);border-radius:16px;padding:12px;min-height:150px;display:flex;align-items:center;justify-content:center}
+.cardwrap img{max-width:100%;max-height:44vh;border-radius:10px;display:block;box-shadow:0 8px 22px -14px rgba(60,48,30,.8)}
+.cardwrap .ph{font-size:12.5px;color:var(--muted)}
+.sheet-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+.sheet-actions .full{grid-column:1/-1}
+.sheet .small{margin:12px 0 0}
+.stack{display:grid;gap:10px}
+.danger{border:0;border-radius:14px;padding:13px 16px;font-size:14px;font-family:inherit;background:#F6E7E2;color:#A33A2A;transition:transform .14s}
+.danger:active{transform:scale(.975)}
+/* 撤销条：删除是破坏性操作，必须给一条后悔路 */
+.undobar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + var(--sab));z-index:8;display:none;align-items:center;gap:10px;max-width:calc(100% - 36px);background:#2C2924;color:#F6F2EA;border-radius:999px;padding:10px 10px 10px 20px;box-shadow:0 14px 30px -14px rgba(30,24,16,.95);font-size:13.5px}
+.undobar.show{display:flex;animation:up .22s ease}
+.undobar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.undobar button{border:0;background:transparent;color:#E7B98F;font-size:13.5px;font-family:inherit;font-weight:600;padding:3px 10px;letter-spacing:.3px;flex:none}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="topbar">
+<div class="tb-row">
+<h1 class="brand">读书卡</h1>
+<div class="savebar"><button id="cancelEdit" class="linkbtn" style="display:none" onclick="cancelEdit()">取消修改</button><button id="save" class="primary">保存这张读书卡</button></div>
+</div>
+<p class="sub">把读过的话，留给未来的自己</p>
+</header>
+
+<section id="home" class="view active">
+<div class="searchwrap"><svg class="sic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/></svg><input id="search" class="search" placeholder="搜索书名、作者、章节、摘录、标签…"></div>
+<div class="section-head"><h2>全部摘录</h2><span id="homeCount" class="count"></span></div>
+<div id="homeGrid" class="grid"></div>
+</section>
+
+<section id="add" class="view">
+<div class="section-head"><h2 id="addTitle">记录一张读书卡</h2></div>
+<div class="form">
+<div class="upload"><label for="ocrFile">📷 拍照 / 截图识别</label><input id="ocrFile" type="file" accept="image/*"><img id="ocrPreview" class="preview"><div id="ocrStatus" class="small">支持中文 + 英文 OCR。首次识别需联网下载中文包（19MB）与英文包（10MB），合计约 30MB，之后可离线复用；识别结果仍可手动修改。</div></div>
+<label class="label">书名</label><input id="title" class="input" placeholder="例如：活着">
+<div class="row"><div><label class="label">作者</label><input id="author" class="input" placeholder="余华"></div><div><label class="label">章节</label><input id="chapter" class="input" placeholder="第三章 / 第45页"></div></div>
+<label class="label">摘录内容</label><textarea id="content" class="textarea" placeholder="把你想留下来的那句话写在这里……"></textarea>
+<label class="label">我的想法（可选）</label><textarea id="thought" class="textarea" style="min-height:90px" placeholder="为什么这句话打动了你？"></textarea>
+<label class="label">标签</label><input id="tags" class="input" placeholder="人生, 自由, 母亲">
+<label class="label">书封面（可选）</label><div class="upload"><label for="coverFile">选择封面</label><input id="coverFile" type="file" accept="image/*"><img id="coverPreview" class="preview"></div>
+</div>
+</section>
+
+<section id="books" class="view">
+<div class="pagehead"><button class="backbtn" onclick="show('profile')" aria-label="返回"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg></button><h2>我的书</h2><span id="bookCount" class="count"></span></div>
+<div class="searchwrap"><svg class="sic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/></svg><input id="bookSearch" class="search" placeholder="搜索书名或作者……"></div>
+<div id="bookGrid" class="bookgrid"></div>
+</section>
+
+<section id="profile" class="view">
+<div class="section-head"><h2>我的</h2></div>
+<div id="stats" class="stats"></div>
+<div class="block-title">数据管理</div>
+<div class="btn-grid">
+<button id="exportJson" class="secondary">导出 JSON</button>
+<button id="exportTxt" class="secondary">导出 TXT</button>
+<button id="importJson" class="secondary">导入 JSON</button>
+<button id="importTxt" class="secondary">导入 TXT</button>
+</div>
+<input id="jsonFile" type="file" accept=".json,application/json,text/plain" style="display:none">
+<input id="txtFile" type="file" accept=".txt,text/plain" style="display:none">
+<p class="small" style="margin-top:20px">数据只保存在本机，不上传服务器。<br>导出 JSON 是完整备份，可在任意设备导入还原；导出 TXT 便于阅读与粘贴到别处，两种格式都支持再次导入。定期导出可避免清理应用数据时丢失。</p>
+</section>
+</div>
+
+<nav class="tabbar">
+<button data-view="home" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5A2.5 2.5 0 0 1 6.5 18H19v3H6.5A2.5 2.5 0 0 1 4 20.5z"/></svg><span>首页</span></button>
+<button data-view="add" class="tab-add"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></i><span>记录</span></button>
+<button data-view="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.2" r="3.7"/><path d="M4.9 20c.7-3.9 3.5-6 7.1-6s6.4 2.1 7.1 6"/></svg><span>我的</span></button>
+</nav>
+
+<div id="modal" class="modal"><div class="sheet">
+<div class="grab"></div>
+<div class="sheet-head"><h3>分享到社交平台</h3><button class="close" onclick="closeModal()" aria-label="关闭">×</button></div>
+<div id="cardWrap" class="cardwrap"><div class="ph">正在生成卡片图…</div></div>
+<div class="sheet-actions">
+<button id="shareCardBtn" class="primary full">分享图片卡片</button>
+<button id="saveCardBtn" class="secondary">保存到相册</button>
+<button id="shareTextBtn" class="secondary">分享纯文字</button>
+</div>
+<p id="cardTip" class="small"></p>
+</div></div>
+
+<div id="actions" class="modal"><div class="sheet">
+<div class="grab"></div>
+<div class="sheet-head"><h3 id="actionsTitle">读书卡</h3><button class="close" onclick="closeActions()" aria-label="关闭">×</button></div>
+<div class="stack">
+<button id="editCardBtn" class="primary">修改这张卡</button>
+<button id="delCardBtn" class="danger">删除这张卡</button>
+<button class="secondary" onclick="closeActions()">取消</button>
+</div>
+</div></div>
+
+<div id="undoBar" class="undobar"><span id="undoText"></span><button id="undoBtn">撤销</button></div>
+
+<script>
+const KEY='bookcards-v3';
+let data=JSON.parse(localStorage.getItem(KEY)||'null');
+if(!Array.isArray(data))data=[];
+let currentShare=null,cardCanvas=null;
+const $=function(id){return document.getElementById(id)};
+const esc=function(s){return String(s==null?'':s).replace(/[&<>"']/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]})};
+const TODAY=function(){let d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)};
+
+function persist(){
+try{localStorage.setItem(KEY,JSON.stringify(data));return true}
+catch(e){alert('本地存储已满，这次修改没有保存成功。\n\n建议：先到「我的」导出 JSON 备份，再删掉几张较早的读书卡或封面图后重试。\n\n（错误：'+((e&&e.name)||e)+'）');return false}
+}
+
+/* ---------- 渲染 ---------- */
+function card(x){
+return '<article class="card">'
++'<div class="cardtools">'
++'<button class="act-ic" onclick="openActions('+x.id+')" aria-label="修改或删除"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5.6" cy="12" r="1.75"/><circle cx="12" cy="12" r="1.75"/><circle cx="18.4" cy="12" r="1.75"/></svg></button>'
++'<button class="act-ic" onclick="openShare('+x.id+')" aria-label="分享"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5V4"/><path d="M8.2 7.5 12 3.7l3.8 3.8"/><path d="M5 14v4.5A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5V14"/></svg></button>'
++'</div>'
++'<div class="bookname">'+esc(x.title)+'</div>'
++(x.author?'<div class="author">'+esc(x.author)+'</div>':'')
++'<div class="quote">“'+esc(x.content)+'”</div>'
++(x.chapter?'<div class="chapter">'+esc(x.chapter)+'</div>':'')
++(x.thought?'<div class="thought">'+esc(x.thought)+'</div>':'')
++((x.tags&&x.tags.length)?'<div class="tags">'+x.tags.map(function(t){return '<span class="tag"># '+esc(t)+'</span>'}).join('')+'</div>':'')
++'<div class="date">'+esc(x.date)+'</div></article>';
+}
+function emptyBox(text,sub,btn){
+return '<div class="empty"><div class="mark">“</div><p>'+text+'</p>'+(sub?'<p class="small">'+sub+'</p>':'')+(btn?'<button class="primary" style="width:auto;padding:12px 22px" onclick="goAdd()">'+btn+'</button>':'')+'</div>';
+}
+function render(){
+let q=($('search').value||'').toLowerCase();
+let f=data.filter(function(x){return [x.title,x.author,x.chapter,x.content,x.thought,(x.tags||[]).join(' ')].join(' ').toLowerCase().indexOf(q)>-1});
+$('homeGrid').innerHTML=f.length?f.map(card).join(''):(data.length?emptyBox('没有匹配的读书卡','换个关键词试试'):emptyBox('还没有读书卡','把让你停下来的那句话，留在这里。','记录第一张'));
+$('homeCount').textContent=data.length?data.length+' 张 · '+new Set(data.map(function(x){return x.title})).size+' 本':'';
+let bs=($('bookSearch').value||'').toLowerCase(),map={};
+data.forEach(function(x){if(!map[x.title])map[x.title]={title:x.title,author:x.author,cover:x.cover,n:0};map[x.title].n++});
+let books=Object.keys(map).map(function(k){return map[k]}).filter(function(x){return (x.title+' '+x.author).toLowerCase().indexOf(bs)>-1});
+$('bookCount').textContent=Object.keys(map).length?Object.keys(map).length+' 本':'';
+$('bookGrid').innerHTML=books.length?books.map(function(b){
+return '<div class="book"><div class="cover">'+(b.cover?'<img src="'+esc(b.cover)+'" alt="">':'<div class="letter">'+esc((b.title||'?').charAt(0))+'</div>')+'</div><div class="bookinfo"><div class="booktitle">'+esc(b.title)+'</div><div class="bookauthor">'+esc(b.author||'佚名')+' · '+b.n+' 张</div></div></div>';
+}).join(''):emptyBox('书架还是空的','记录一张读书卡，这里就会长出书来');
+let words=data.reduce(function(s,x){return s+String(x.content||'').length+String(x.thought||'').length},0);
+$('stats').innerHTML=
+'<button class="stat link" onclick="show(\'home\')"><div class="num">'+data.length+'</div><div class="small">读书卡 ›</div></button>'
++'<button class="stat link" onclick="show(\'books\')"><div class="num">'+Object.keys(map).length+'</div><div class="small">读过的书 ›</div></button>'
++'<div class="stat"><div class="num">'+words+'</div><div class="small">累计字数</div></div>';
+}
+
+/* ---------- 视图切换 ---------- */
+/* 书架已从底部导航移除，改由「我的 → 读过的书」进入，属「我的」的子页面。
+   故底部高亮需按归属页反查，否则进书架时四个按钮全灭，看不出自己在哪。 */
+const TAB_OWNER={home:'home',add:'add',profile:'profile',books:'profile'};
+function show(id){
+/* 保存按钮住在品牌栏里，靠 body 的属性决定显不显示（只有记录页要它）。
+   用属性而不是逐个切 class，是为了让 CSS 一条规则就能管住，不散落在多处。 */
+document.body.dataset.view=id;
+document.querySelectorAll('.view').forEach(function(x){x.classList.remove('active')});
+$(id).classList.add('active');
+let owner=TAB_OWNER[id]||id;
+document.querySelectorAll('.tabbar button').forEach(function(x){x.classList.toggle('active',x.dataset.view===owner)});
+window.scrollTo(0,0);
+render();
+}
+/* 从底部「记录」进来永远是新建；修改入口走 openEditor()，不会互相污染 */
+document.querySelectorAll('.tabbar button').forEach(function(b){b.onclick=function(){if(b.dataset.view==='add')resetEditor();show(b.dataset.view)}});
+function goAdd(){resetEditor();show('add')}
+$('search').oninput=render;$('bookSearch').oninput=render;
+
+/* ---------- 新增 / 修改（同一个表单，靠 editingId 区分） ---------- */
+let coverData='',editingId=null;
+// 封面压缩后再存：原图 base64 动辄 3–5MB，几张就会写爆 localStorage（约 5MB）导致整库保存失败。
+// 统一压到最长边 800px 的 JPEG，单张约 100KB 量级。
+$('coverFile').onchange=function(){
+let f=this.files[0];if(!f)return;
+let r=new FileReader();
+r.onload=function(){
+let img=new Image();
+img.onload=function(){
+let MAX=800,w=img.width,h=img.height;
+if(w>MAX||h>MAX){let s=Math.min(MAX/w,MAX/h);w=Math.round(w*s);h=Math.round(h*s)}
+let c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);
+coverData=c.toDataURL('image/jpeg',0.72);
+let p=$('coverPreview');p.src=coverData;p.style.display='block';
+};
+img.onerror=function(){alert('这张图片读不出来，请换一张。')};
+img.src=r.result;
+};
+r.readAsDataURL(f);
+};
+function preview(input,img,cb){let f=input.files[0];if(!f)return;let r=new FileReader();r.onload=function(){img.src=r.result;img.style.display='block';if(cb)cb(r.result)};r.readAsDataURL(f)}
+const OCR_HINT='支持中文 + 英文 OCR。首次识别需联网下载中文包（19MB）与英文包（10MB），合计约 30MB，之后可离线复用；识别结果仍可手动修改。';
+$('ocrFile').onchange=function(){
+preview(this,$('ocrPreview'),async function(){
+let s=$('ocrStatus');
+if(typeof Tesseract==='undefined'){s.textContent='识别引擎没加载成功（需联网）。请在「摘录内容」里手动输入。';return}
+s.textContent='正在准备识别……首次使用需联网下载中英文语言包（合计约 30MB），请稍等。';
+try{
+let r=await Tesseract.recognize($('ocrFile').files[0],'chi_sim+eng',{logger:function(m){
+if(m.status==='recognizing text')s.textContent='正在识别：'+Math.round(m.progress*100)+'%';
+else if(m.status&&String(m.status).indexOf('language')>-1)s.textContent='正在下载语言包……';
+}});
+let t=((r&&r.data&&r.data.text)||'').trim();
+if(!t){s.textContent='没识别出文字。换一张更清晰的图，或直接手动输入。';return}
+$('content').value=t;s.textContent='识别完成，可以手动修改后保存。';
+}catch(e){s.textContent='识别失败：'+String((e&&e.message)||e).slice(0,120)+'。可手动输入。'}
+});
+};
+/* 编辑态与新建态共用这一套控件，重置必须彻底：
+   漏掉封面或标题文字，下次点「记录」会带着上一条的残留内容。 */
+function resetEditor(){
+editingId=null;coverData='';
+['title','author','chapter','content','thought','tags'].forEach(function(id){$(id).value=''});
+let p=$('coverPreview');p.style.display='none';p.removeAttribute('src');
+$('ocrPreview').style.display='none';$('ocrStatus').textContent=OCR_HINT;
+$('addTitle').textContent='记录一张读书卡';
+$('save').textContent='保存这张读书卡';
+$('cancelEdit').style.display='none';
+}
+function openEditor(id){
+let i=-1;for(let k=0;k<data.length;k++)if(data[k].id===id){i=k;break}
+if(i<0){alert('这张读书卡已经不存在了，可能已被删除。');return}
+let x=data[i];
+closeActions();
+resetEditor();
+editingId=id;
+$('title').value=x.title||'';$('author').value=x.author||'';$('chapter').value=x.chapter||'';
+$('content').value=x.content||'';$('thought').value=x.thought||'';
+$('tags').value=(x.tags||[]).join(', ');
+coverData=x.cover||'';
+if(coverData){let p=$('coverPreview');p.src=coverData;p.style.display='block'}
+$('addTitle').textContent='修改这张读书卡';
+$('save').textContent='保存修改';
+$('cancelEdit').style.display='block';
+show('add');
+}
+function cancelEdit(){resetEditor();show('home')}
+
+$('save').onclick=function(){
+let title=$('title').value.trim(),text=$('content').value.trim();
+if(!title||!text){alert('请至少填写书名和摘录内容。');return}
+let fields={title:title,author:$('author').value.trim(),chapter:$('chapter').value.trim(),content:text,thought:$('thought').value.trim(),tags:$('tags').value.split(/[,，、]/).map(function(x){return x.trim()}).filter(Boolean),cover:coverData};
+// 修改：原地替换，保留原 id 与原始记录日期（改的是文字，不是"何时读的"）
+if(editingId!=null){
+let i=-1;for(let k=0;k<data.length;k++)if(data[k].id===editingId){i=k;break}
+if(i<0){alert('这张读书卡已经不存在了，可能已被删除。');resetEditor();show('home');return}
+let old=data[i];
+data[i]=Object.assign({},old,fields);
+if(!persist()){data[i]=old;return}
+resetEditor();alert('修改已保存。');show('home');return;
+}
+let rec=Object.assign({id:Date.now(),date:TODAY()},fields);
+data.unshift(rec);
+if(!persist()){data.shift();return}
+resetEditor();alert('已保存这张读书卡。');show('home');
+};
+
+/* ---------- 卡片操作（修改 / 删除） ---------- */
+let actionId=null;
+function openActions(id){
+let x=data.find(function(v){return v.id===id});
+if(!x)return;
+actionId=id;
+$('actionsTitle').textContent='《'+(x.title||'未命名')+'》';
+$('actions').classList.add('show');
+}
+function closeActions(){$('actions').classList.remove('show')}
+$('editCardBtn').onclick=function(){if(actionId!=null)openEditor(actionId)};
+$('delCardBtn').onclick=function(){if(actionId!=null)deleteCard(actionId)};
+
+/* 删除是不可逆的，所以：先 confirm，再把记录与下标留在内存里，给 6 秒撤销窗口。
+   persist 失败时必须把记录插回原位，否则界面与存储会不一致。 */
+let lastDeleted=null,undoTimer=null;
+function deleteCard(id){
+let i=-1;for(let k=0;k<data.length;k++)if(data[k].id===id){i=k;break}
+if(i<0)return;
+let x=data[i];
+if(!confirm('删除《'+(x.title||'未命名')+'》这张读书卡？\n\n删除后 6 秒内可以撤销。想长期保留，建议在「我的」导出 JSON 备份。'))return;
+data.splice(i,1);
+if(!persist()){data.splice(i,0,x);return}
+lastDeleted={rec:x,idx:i};
+if(editingId===id)resetEditor();
+closeActions();
+render();
+$('undoText').textContent='已删除《'+(x.title||'未命名')+'》';
+$('undoBar').classList.add('show');
+if(undoTimer)clearTimeout(undoTimer);
+undoTimer=setTimeout(function(){$('undoBar').classList.remove('show');lastDeleted=null},6000);
+}
+$('undoBtn').onclick=function(){
+if(!lastDeleted)return;
+let d=lastDeleted;lastDeleted=null;
+if(undoTimer)clearTimeout(undoTimer);
+data.splice(Math.min(d.idx,data.length),0,d.rec);
+if(!persist()){data.splice(d.idx,1);return}
+$('undoBar').classList.remove('show');
+render();
+};
+
+/* ---------- 分享 ---------- */
+function openShare(id){
+currentShare=data.find(function(x){return x.id===id})||null;
+if(!currentShare)return;
+cardCanvas=null;
+let wrap=$('cardWrap');
+wrap.innerHTML='<div class="ph">正在生成卡片图…</div>';
+$('cardTip').textContent='';
+$('modal').classList.add('show');
+setTimeout(function(){
+try{
+cardCanvas=buildCardImage(currentShare);
+let url=cardCanvas.toDataURL('image/jpeg',0.62);
+if(!url||url.length<200)throw new Error('图片数据为空');
+wrap.innerHTML='';
+let img=document.createElement('img');img.src=url;img.alt='读书卡预览';wrap.appendChild(img);
+$('cardTip').textContent='已生成 1080×'+cardCanvas.height+' 的卡片图，可直接分享到微信、微博等平台。';
+}catch(e){
+wrap.innerHTML='<div class="ph">卡片图生成失败，仍可分享纯文字</div>';
+$('cardTip').textContent='生成失败：'+String((e&&e.message)||e);
+}
+},40);
+}
+function closeModal(){$('modal').classList.remove('show')}
+function shareTextOf(){
+let x=currentShare;if(!x)return;
+let t='“'+x.content+'”\n—— 《'+x.title+'》'+(x.author?' · '+x.author:'')+(x.chapter?'（'+x.chapter+'）':'')+(x.thought?'\n\n我的想法：'+x.thought:'');
+let B=window.AndroidBridge;
+if(B&&B.shareText){try{B.shareText('读书卡',t);return}catch(e){}}
+if(navigator.share){navigator.share({title:'读书卡',text:t}).catch(function(){});return}
+if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(function(){alert('已复制到剪贴板')},function(){fallbackCopy(t);alert('已复制到剪贴板')});return}
+fallbackCopy(t);alert('已复制到剪贴板');
+}
+function fallbackCopy(t){try{let a=document.createElement('textarea');a.value=t;a.style.position='fixed';a.style.opacity='0';document.body.appendChild(a);a.select();document.execCommand('copy');a.remove()}catch(e){}}
+$('shareTextBtn').onclick=shareTextOf;
+
+/* Canvas → PNG → 分片送原生。
+   不能把整串 base64 当参数一次性传给 AndroidBridge：桥接走 IPC，1080 宽的卡片图常达 1–3MB，
+   会被静默丢弃且无任何异常，表现为「点了没反应」。必须分片。 */
+function deliverImage(cv,name,action){
+let b64;
+try{b64=cv.toDataURL('image/png').split(',')[1]}catch(e){alert('生成图片失败：'+String((e&&e.message)||e));return}
+if(!b64||b64.length<100){alert('生成图片失败，摘录内容可能过长。');return}
+let B=window.AndroidBridge;
+if(B&&B.beginImage&&B.pushImagePart){
+try{
+const SIZE=65536;
+let total=Math.ceil(b64.length/SIZE)||1;
+B.beginImage(name,total);
+for(let i=0;i<total;i++)B.pushImagePart(i,b64.substr(i*SIZE,SIZE));
+if(action==='share')B.shareImageDone();else B.saveImageDone();
+return;
+}catch(e){}
+}
+cv.toBlob(function(blob){
+if(!blob){alert('生成图片失败，摘录内容可能过长。');return}
+let file=null;
+try{file=new File([blob],name,{type:'image/png'})}catch(e){}
+if(file&&navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({files:[file]}).catch(function(){});return}
+try{
+let url=URL.createObjectURL(blob),a=document.createElement('a');
+a.href=url;a.download=name;document.body.appendChild(a);a.click();
+setTimeout(function(){URL.revokeObjectURL(url);a.remove()},1500);
+alert(action==='share'?'当前环境不支持直接分享，图片已保存为下载文件。':'图片已保存为下载文件。');
+}catch(e){alert('导出失败：'+String((e&&e.message)||e))}
+},'image/png');
+}
+function cardFileName(){return '读书卡-'+TODAY()+'-'+Math.random().toString(36).slice(2,6)+'.png'}
+$('shareCardBtn').onclick=function(){if(!cardCanvas){alert('卡片图还没生成好，请稍等。');return}deliverImage(cardCanvas,cardFileName(),'share')};
+$('saveCardBtn').onclick=function(){if(!cardCanvas){alert('卡片图还没生成好，请稍等。');return}deliverImage(cardCanvas,cardFileName(),'save')};
+
+/* ---------- 卡片图绘制（纯 Canvas，无外部依赖） ---------- */
+function wrapText(ctx,text,maxW){
+let lines=[],cur='';
+text=String(text==null?'':text).replace(/\r/g,'');
+for(let i=0;i<text.length;i++){
+let ch=text.charAt(i);
+if(ch==='\n'){lines.push(cur);cur='';continue}
+if(ctx.measureText(cur+ch).width>maxW&&cur){lines.push(cur);cur=ch}else cur+=ch;
+}
+if(cur||!lines.length)lines.push(cur);
+return lines;
+}
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+function buildCardImage(x){
+const W=1080,P=104,cw=W-P*2,SERIF='"Songti SC","Noto Serif CJK SC","Source Han Serif SC",Georgia,serif';
+const BRAND=80,LINEGAP=62,LH=86,TGAP=52,TLH=58,TAGGAP=54,TAGH=56,FGAP=64,FH=52;
+let cv=document.createElement('canvas'),ctx=cv.getContext('2d');
+if(!ctx)throw new Error('当前环境不支持 Canvas');
+ctx.font='500 52px '+SERIF;
+let body=wrapText(ctx,'“'+x.content+'”',cw);
+let noteLines=[];
+if(x.thought){ctx.font='400 36px '+SERIF;noteLines=wrapText(ctx,x.thought,cw-46)}
+let tags=(x.tags||[]).slice(0,4),tagW=[];
+if(x.tags&&x.tags.length>4)tags=tags.concat(['+'+(x.tags.length-4)]);
+if(tags.length){ctx.font='500 27px '+SERIF;tags.forEach(function(t){tagW.push(ctx.measureText('# '+t).width+44)})}
+let totalW=0;tagW.forEach(function(w,i){totalW+=w+(i?14:0)});
+if(totalW>cw){tags=tags.slice(0,3);tagW=tagW.slice(0,3)}
+let H=P+BRAND+LINEGAP+body.length*LH+(noteLines.length?TGAP+noteLines.length*TLH:0)+(tags.length?TAGGAP+TAGH:0)+FGAP+FH+P-40;
+const MAXH=3600,sc=Math.min(1,MAXH/H);
+cv.width=Math.round(W*sc);cv.height=Math.round(H*sc);
+ctx.scale(sc,sc);
+// 背景
+ctx.fillStyle='#FBF8F2';ctx.fillRect(0,0,W,H);
+// 右下角引号水印
+ctx.save();ctx.globalAlpha=.055;ctx.fillStyle='#A8613C';ctx.font='600 420px '+SERIF;ctx.textAlign='right';
+ctx.fillText('”',W-P+40,H-P-30);ctx.restore();
+// 内框
+ctx.strokeStyle='#E9E0CF';ctx.lineWidth=2;ctx.strokeRect(38,38,W-76,H-76);
+ctx.textAlign='left';ctx.textBaseline='alphabetic';
+let y=P;
+// 品牌行
+ctx.fillStyle='#A8613C';ctx.beginPath();ctx.arc(P+7,y+24,7,0,Math.PI*2);ctx.fill();
+ctx.fillStyle='#8A8072';ctx.font='500 30px '+SERIF;ctx.fillText('读书卡',P+28,y+34);
+ctx.textAlign='right';ctx.font='400 27px '+SERIF;ctx.fillText(x.date||'',W-P,y+34);ctx.textAlign='left';
+y+=BRAND;
+ctx.strokeStyle='#E9E0CF';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(P,y);ctx.lineTo(W-P,y);ctx.stroke();
+y+=LINEGAP;
+// 正文
+ctx.fillStyle='#26231E';ctx.font='500 52px '+SERIF;
+for(let i=0;i<body.length;i++)ctx.fillText(body[i],P,y+52+i*LH);
+y+=body.length*LH;
+// 想法
+if(noteLines.length){
+y+=TGAP;
+ctx.fillStyle='#E1D3BE';ctx.fillRect(P,y-30,4,noteLines.length*TLH-10);
+ctx.fillStyle='#6B6357';ctx.font='400 36px '+SERIF;
+for(let i=0;i<noteLines.length;i++)ctx.fillText(noteLines[i],P+28,y+34+i*TLH);
+y+=noteLines.length*TLH;
+}
+// 标签
+if(tags.length){
+y+=TAGGAP;
+ctx.font='500 27px '+SERIF;
+let tx=P;
+for(let i=0;i<tags.length;i++){
+let w=tagW[i];
+roundRect(ctx,tx,y,w,50,25);ctx.fillStyle='#F2EAE0';ctx.fill();
+ctx.fillStyle='#7C7161';ctx.fillText('# '+tags[i],tx+22,y+34);
+tx+=w+14;
+}
+y+=TAGH;
+}
+// 底部
+y+=FGAP;
+ctx.strokeStyle='#E9E0CF';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(P,y);ctx.lineTo(W-P,y);ctx.stroke();
+ctx.fillStyle='#26231E';ctx.font='600 42px '+SERIF;ctx.fillText('《'+x.title+'》',P,y+38);
+if(x.author){ctx.textAlign='right';ctx.fillStyle='#948B7D';ctx.font='400 28px '+SERIF;ctx.fillText(x.author,W-P,y+36);ctx.textAlign='left'}
+return cv;
+}
+
+/* ---------- 导入导出 ---------- */
+function download(name,text,type){
+if(window.AndroidBridge&&AndroidBridge.saveText){try{AndroidBridge.saveText(name,text);return}catch(e){}}
+try{
+let a=document.createElement('a');
+a.href=URL.createObjectURL(new Blob([text],{type:type}));
+a.download=name;document.body.appendChild(a);a.click();
+setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1500);
+}catch(e){alert('导出失败：'+String((e&&e.message)||e))}
+}
+$('exportJson').onclick=function(){download('读书卡-'+TODAY()+'.json',JSON.stringify(data,null,2),'application/json')};
+$('exportTxt').onclick=function(){
+let txt=data.map(function(x){
+let s='《'+x.title+'》'+(x.author?'｜'+x.author:'')+'\n';
+if(x.chapter)s+=x.chapter+'\n';
+s+='\n“'+x.content+'”\n';
+if(x.thought)s+='\n【想法】'+x.thought+'\n';
+if(x.tags&&x.tags.length)s+='【标签】'+x.tags.join('、')+'\n';
+s+=x.date||'';
+return s;
+}).join('\n\n---\n\n');
+download('读书卡-'+TODAY()+'.txt',txt,'text/plain;charset=utf-8');
+};
+
+/* 读文本文件。Windows 记事本默认存 ANSI/GBK，先按 UTF-8 解，出现替换字符再按 GBK 重解，
+   否则用户导入自己写的 TXT 会看到一屏乱码。 */
+function readText(input,cb){
+let f=input.files[0];if(!f)return;
+let r=new FileReader();
+r.onload=function(){
+let buf=r.result,text='';
+try{text=new TextDecoder('utf-8').decode(buf)}catch(e){}
+let bad=(text.match(/\uFFFD/g)||[]).length;
+if(!text||bad>2){try{let g=new TextDecoder('gbk').decode(buf);if(g&&(g.match(/\uFFFD/g)||[]).length<bad)text=g}catch(e){}}
+cb(text,f.name||'');
+};
+r.onerror=function(){alert('文件读取失败，请重试。')};
+r.readAsArrayBuffer(f);
+}
+function normDate(s){
+let m=String(s||'').match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+return m?(m[1]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[3]).slice(-2)):'';
+}
+/* TXT 解析。
+   本应用导出的 TXT 用一行 --- 分隔每条记录（块内含空行，所以不能只靠空行切块）；
+   识别不了分隔线时退回按空行切块，并把"续行"并入上一条，兼容手写笔记。
+   字段：首行「《书名》｜作者」，块内认 【想法】【标签】 与日期，其余行合并为摘录内容。 */
+function parseTXT(text){
+let raw=String(text||'').replace(/\uFEFF/g,'').replace(/\r\n?/g,'\n');
+let SEP=/^[ \t]*(?:-{3,}|\*{3,}|⸻+|={3,})[ \t]*$/m;
+let chunks=SEP.test(raw)?raw.split(SEP):raw.split(/\n[ \t]*\n+/);
+let headOf=function(c){let ls=c.split('\n');for(let i=0;i<ls.length;i++){if(ls[i].trim())return ls[i].trim()}return ''};
+let isHead=function(s){return /^《/.test(s)||/[｜|]/.test(s)};
+let blocks=chunks;
+if(chunks.some(function(c){return isHead(headOf(c))})){
+blocks=[];
+chunks.forEach(function(c){
+let f=headOf(c);
+if(!f)return;
+// 不是记录起始行 → 视为上一条的续行（块内空行导致被切开的情况）
+if(blocks.length&&!isHead(f))blocks[blocks.length-1]+='\n\n'+c;
+else blocks.push(c);
+});
+}
+let recs=[];
+blocks.forEach(function(b){
+let lines=b.split('\n').map(function(s){return s.trim()}).filter(function(s){return s!==''});
+if(!lines.length)return;
+let first=lines.shift(),title='',author='',m=null;
+m=first.match(/^《([^》]+)》[ \t]*[｜|]?[ \t]*(.*)$/);
+if(!m)m=first.match(/^([^｜|]{1,30})[ \t]*[｜|][ \t]*(.*)$/);
+if(m){title=m[1].trim();author=(m[2]||'').trim()}
+else lines.unshift(first);          // 首行不像书名 → 并入正文，宁可没标题也不丢内容
+let thought='',tags=[],date='',body=[],chapter='';
+lines.forEach(function(l,i){
+let t=l.match(/^【?(想法|笔记|感悟|心得|点评)】?[ \t]*[:：]?[ \t]*(.*)$/);
+let g=l.match(/^【?(标签|书签|tags?)】?[ \t]*[:：]?[ \t]*(.*)$/i);
+if(t){thought=t[2].trim();return}
+if(g){tags=g[2].split(/[,，、#\s]+/).filter(Boolean);return}
+let d=normDate(l);
+if(d){date=d;return}
+// 章节行：仅当本块确实有书名行时判断（否则普通笔记的首句会被误当章节）
+if(m&&!chapter&&!body.length&&i<lines.length-1&&l.length<=20&&!/[，。！？；：、,.]$/.test(l)){chapter=l;return}
+body.push(l);
+});
+let content=body.join('\n').replace(/^[“"'\s]+|[”"'\s]+$/g,'').trim();
+if(!content&&thought){content=thought;thought=''}
+if(!content)return;
+recs.push({title:title||'未命名',author:author,chapter:chapter,content:content,thought:thought,tags:tags,date:date||TODAY(),cover:''});
+});
+return recs;
+}
+function mergeIn(recs){
+if(!recs.length){alert('没有从文件里识别到可导入的内容。\n\nTXT 里每条之间用空行分开就行；首行写成「《书名》｜作者」效果最好。');return}
+let head='从文件里识别到 '+recs.length+' 条读书卡：\n\n'+recs.slice(0,3).map(function(r){return '· '+r.title}).join('\n')+(recs.length>3?'\n· ……':'');
+if(!confirm(head+'\n\n将与现有 '+data.length+' 条合并（内容完全相同的会自动跳过），确定导入吗？'))return;
+let seen={},add=0,skip=0;
+data.forEach(function(x){seen[x.title+'\u0000'+x.content]=1});
+let base=Date.now();
+recs.forEach(function(r){
+let k=r.title+'\u0000'+r.content;
+if(seen[k]){skip++;return}
+seen[k]=1;r.id=base+add;data.push(r);add++;
+});
+if(!add){alert('这 '+recs.length+' 条都已经在本地了，没有新增。');return}
+if(!persist()){data.length-=add;return}
+render();
+alert('导入完成：新增 '+add+' 条'+(skip?('，跳过重复 '+skip+' 条'):'')+'。共 '+data.length+' 条。');
+}
+$('importJson').onclick=function(){$('jsonFile').value='';$('jsonFile').click()};
+$('importTxt').onclick=function(){$('txtFile').value='';$('txtFile').click()};
+$('jsonFile').onchange=function(){
+readText(this,function(text,name){
+let obj=null;
+try{obj=JSON.parse(text)}catch(e){alert('「'+name+'」不是有效的 JSON 文件：\n'+String((e&&e.message)||e));return}
+let list=null;
+if(Array.isArray(obj))list=obj;
+else if(obj&&typeof obj==='object'){
+let k=Object.keys(obj).filter(function(k){return Array.isArray(obj[k])})[0];
+if(k)list=obj[k];else if(obj.title||obj.content)list=[obj];
+}
+if(!list){alert('这个 JSON 里没有找到读书卡列表。');return}
+let recs=[];
+list.forEach(function(o){
+if(!o||typeof o!=='object')return;
+let content=String(o.content||o.text||o.quote||'').trim();
+if(!content)return;
+let tags=Array.isArray(o.tags)?o.tags.map(String):String(o.tags||'').split(/[,，、]/);
+recs.push({title:String(o.title||o.book||'未命名').trim()||'未命名',author:String(o.author||'').trim(),chapter:String(o.chapter||'').trim(),content:content,thought:String(o.thought||o.note||'').trim(),tags:tags.map(function(t){return t.trim()}).filter(Boolean),date:normDate(o.date)||TODAY(),cover:typeof o.cover==='string'?o.cover:''});
+});
+if(!recs.length){alert('这个文件里的记录都缺少「摘录内容」，没有可导入的项。');return}
+mergeIn(recs);
+});
+};
+$('txtFile').onchange=function(){let self=this;readText(self,function(text){mergeIn(parseTXT(text))})};
+
+// 供原生外壳的返回键调用：先关弹窗，再从子页面回首页，都消费不掉才让系统退出应用
+window.__appBack=function(){
+let m=$('modal');
+if(m&&m.classList.contains('show')){closeModal();return true}
+let a=$('actions');
+if(a&&a.classList.contains('show')){closeActions();return true}
+let u=$('undoBar');
+if(u&&u.classList.contains('show')){$('undoBar').classList.remove('show');lastDeleted=null;return true}
+let v=document.querySelector('.view.active');
+if(!v)return false;
+if(v.id==='books'){show('profile');return true}          // 书架是「我的」的子页，退回「我的」
+if(v.id==='add'&&editingId!=null){resetEditor();show('home');return true}
+if(v.id!=='home'){show('home');return true}
+return false;
+};
+resetEditor();
+render();
+</script>
+</body></html>

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 只申请一个权限：网络访问。
+         V3 的 OCR 走 Tesseract.js，引擎与中英文语言包（chi_sim 19.2MB + eng 10.4MB）
+         在首次识别时从 CDN 拉取，没有网络权限该功能必然失败。
+         其余功能（记录、搜索、导出、导入、分享卡片图）全部本地完成：
+         导出走 MediaStore、分享走 FileProvider + 系统 chooser，都不需要任何存储权限。 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- 移除 androidx 合并注入的内部权限（签名级，不向用户展示，仅为精简声明） -->
+    <uses-permission
+        android:name="com.debugmh.bookcard.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+        tools:node="remove" />
+
+    <application
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:theme="@style/AppTheme"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="false">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|uiMode"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 分享卡片图用：把缓存目录里的 PNG 以 content:// 交给微信/微博等应用读取。
+             exported=false + 仅授权读取，不泄露应用私有文件，也无需任何存储权限。 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.debugmh.bookcard.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+
+</manifest>
